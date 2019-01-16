@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"flag"
 	"fmt"
 	"image"
@@ -8,6 +10,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	_ "image/png"
+	"io"
 	"log"
 	"os"
 
@@ -37,11 +40,24 @@ func main() {
 			log.Fatal(err)
 		}
 		defer writer.Close()
-		img := lsb.Hide(srcImage, []byte(*text))
+		var buffer bytes.Buffer
+		c := zlib.NewWriter(&buffer)
+		c.Write([]byte(*text))
+		c.Close()
+		img := lsb.Hide(srcImage, buffer.Bytes())
 		png.Encode(writer, img)
-		fmt.Printf("Wrote %v bytes\n", len(*text))
+		fmt.Printf("Wrote %v bytes\n", len(buffer.Bytes()))
 	case "reveal":
 		data := lsb.Reveal(srcImage)
-		fmt.Printf("Revealed text:\n%v\n", string(data))
+		inBuffer := bytes.NewBuffer(data)
+		var outBuffer bytes.Buffer
+		uc, err := zlib.NewReader(inBuffer)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer uc.Close()
+		io.Copy(&outBuffer, uc)
+
+		fmt.Printf("Revealed text:\n%v\n", string(outBuffer.Bytes()))
 	}
 }
